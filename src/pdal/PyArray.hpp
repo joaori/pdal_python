@@ -49,6 +49,7 @@
 
 #include <vector>
 #include <memory>
+#include <optional>
 
 namespace pdal
 {
@@ -57,6 +58,7 @@ namespace python
 
 class ArrayIter;
 
+using ArrayStreamHandler = std::function<int64_t()>;
 
 class PDAL_DLL Array
 {
@@ -64,7 +66,7 @@ public:
     using Shape = std::array<size_t, 3>;
     using Fields = std::vector<MemoryViewReader::Field>;
 
-    Array(PyArrayObject* array);
+    Array(PyArrayObject* array, std::shared_ptr<ArrayStreamHandler> stream_handler = {});
     ~Array();
 
     Array(Array&& a) = default;
@@ -76,14 +78,14 @@ public:
     bool rowMajor() const { return m_rowMajor; };
     Shape shape() const { return m_shape; }
     const Fields& fields() const { return m_fields; };
-    ArrayIter& iterator();
+    std::shared_ptr<ArrayIter> iterator();
 
 private:
     PyArrayObject* m_array;
     Fields m_fields;
     bool m_rowMajor;
     Shape m_shape {};
-    std::vector<std::unique_ptr<ArrayIter>> m_iterators;
+    std::shared_ptr<ArrayStreamHandler> m_stream_handler;
 };
 
 
@@ -93,7 +95,7 @@ public:
     ArrayIter(const ArrayIter&) = delete;
     ArrayIter() = delete;
 
-    ArrayIter(PyArrayObject*);
+    ArrayIter(PyArrayObject*, std::shared_ptr<ArrayStreamHandler>);
     ~ArrayIter();
 
     ArrayIter& operator++();
@@ -101,12 +103,15 @@ public:
     char* operator*() const { return *m_data; }
 
 private:
-    NpyIter *m_iter;
+    NpyIter *m_iter = nullptr;
     NpyIter_IterNextFunc *m_iterNext;
     char **m_data;
-    npy_intp *m_size;
-    npy_intp *m_stride;
+    npy_intp m_size;
+    npy_intp m_stride;
     bool m_done;
+
+    std::shared_ptr<ArrayStreamHandler> m_stream_handler;
+    void resetIterator(std::optional<PyArrayObject*> np_array);
 };
 
 } // namespace python
